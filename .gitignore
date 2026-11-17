@@ -1,0 +1,15 @@
+.idea/
+*.pyc
+*.arpa
+*.user
+*.tar.gz
+
+
+*.egg-info/
+build/
+dist/
+jamspell.py
+*.so
+jamspell_wrap.cpp
+*.code-workspace
+.vscode/

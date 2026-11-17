@@ -4,7 +4,7 @@
 
 Trie implementation based on the "HAT-trie: A Cache-conscious Trie-based Data Structure for Strings." (Askitis Nikolas and  Sinha Ranjan, 2007) paper. For now, only the pure HAT-trie has been implemented, the hybrid version may arrive later. Details regarding the HAT-trie data structure can be found [here](https://tessil.github.io/2017/06/22/hat-trie.html).
 
-The library provides an efficient and compact way to store a set or a map of strings by compressing the common prefixes. It also allows to search for keys that match a prefix. Note though that the default parameters of the structure are geared toward optimizing exact searches, if you do a lot of prefix searches you may want to reduce the burst threshold through the `burst_threshold` method.
+The library provides an efficient and compact way to store a set or a map of strings (or, more generally, of any sequence of integers, see [keys of any integral type](#keys-of-any-integral-type)) by compressing the common prefixes. It also allows to search for keys that match a prefix. Note though that the default parameters of the structure are geared toward optimizing exact searches, if you do a lot of prefix searches you may want to reduce the burst threshold through the `burst_threshold` method.
 
 It's a well adapted structure to store a large number of strings.
 
@@ -26,6 +26,9 @@ The library provides two classes: `tsl::htrie_map` and `tsl::htrie_set`.
 - Keys are not ordered as they are partially stored in a hash map.
 - All operations modifying the data structure (insert, emplace, erase, ...) invalidate the iterators. 
 - Support null characters in the key (you can thus store binary data in the trie).
+- A key is a sequence of "letters" of any integral type: `char`, `wchar_t`, `char16_t`, `char32_t` but also `std::uint16_t`, `unsigned int`, ... You are thus not limited to alphabets of 256 letters (see [keys of any integral type](#keys-of-any-integral-type)).
+- The way the trie nodes store their children is a template parameter (see [children policies](#children-policies)). Several policies are provided (dense array, flat map, bitmap, `std::map`) and you can write your own.
+- All the memory of the trie is allocated through an `Allocator` template parameter. Stateful allocators and fancy pointers are supported, so a trie can live in shared memory or in a memory mapped file (see [allocators](#allocators)).
 - Support for any type of value as long at it's either copy-constructible or both nothrow move constructible and nothrow move assignable.
 - The balance between speed and memory usage can be modified through the `max_load_factor` method. A lower max load factor will increase the speed, a higher one will reduce the memory usage. Its default value is set to 8.0.
 - The default burst threshold, which is the maximum size of an array hash node before a burst occurs, is set to 16 384 which provides good performances for exact searches. If you mainly use prefix searches, you may want to reduce it to something like 1024 or lower for faster iteration on the results through the `burst_threshold` method.
@@ -36,6 +39,8 @@ Thread-safety and exception guarantees are similar to the STL containers.
 ### Hash function
 
 The default hash function used by the structure depends on the presence of `std::string_view`. If it is available, `std::hash<std::string_view>` is used, otherwise a simple [FNV-1a](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function#FNV-1a_hash) hash function is used to avoid any dependency.
+
+For the letter types that are not a standard character type (`std::uint16_t`, `unsigned int`, `unsigned char`, ...) there is no `std::hash` for their string views, `tsl::detail_htrie_hash::fnv1a_hash` (an FNV-1a hash of the bytes of each letter) is used instead, whatever the C++ version. As for strings, you may want to provide a better hash function through the `Hash` template parameter. It must support `std::size_t operator()(const CharT* key, std::size_t key_size) const`.
 
 If you can't use C++17 or later, we recommend to replace the hash function with something like [CityHash](https://github.com/google/cityhash), MurmurHash, [FarmHash](https://github.com/google/farmhash), ... for better performances. On the tests we did, CityHash64 offers a ~20% improvement on reads compared to FNV-1a.
 
@@ -54,6 +59,205 @@ tsl::htrie_map<char, int, str_hash> map;
 
 The `std::hash<std::string>` can't be used efficiently as the structure doesn't store any `std::string` object. Any time a hash would be needed, a temporary `std::string` would have to be created.
 
+
+### Keys of any integral type
+
+`CharT`, the first template parameter of `tsl::htrie_map` and `tsl::htrie_set`, can be any integral type (but `bool`). A key is a sequence of `CharT` and every method taking a key accepts:
+
+- a null-terminated array: `map.find(U"key")`,
+- any contiguous container having `data()` and `size()` (`std::basic_string`, `std::basic_string_view`, `std::vector<CharT>`, `std::array<CharT, N>`, ...): `map.find(std::vector<std::uint32_t>{1, 2, 3})`,
+- a pointer and a size through the `_ks` variant of the method: `map.find_ks(ptr, size)`. This is the only form that can't be ambiguous and the cheapest one.
+
+Keys can contain null letters when given as a container or through the `_ks` methods.
+
+`iterator::key()` returns a `std::basic_string<CharT>` for `char`, `wchar_t`, `char16_t`, `char32_t` (and `char8_t`) and a `std::vector<CharT>` for any other letter type. The type is available as `key_buffer_type`.
+
+```c++
+#include <cassert>
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <tsl/htrie_map.h>
+
+int main() {
+    // Unicode code points as letters
+    tsl::htrie_map<char32_t, int> map = {{U"\U0001F600 smile", 1}, {U"\u20AC euro", 2}};
+    map[U"\u0416\u0443\u043A"] = 3;
+    map.insert(std::u32string(U"string"), 4);
+    assert(map.at(U"\u20AC euro") == 2);
+
+    // Any sequence of integers can be a key, here with 32 bits unsigned letters
+    tsl::htrie_map<std::uint32_t, std::string> path_map;
+    const std::vector<std::uint32_t> path = {4000000000u, 1, 2, 3};
+    path_map.insert(path, "value");
+    path_map.insert_ks(path.data(), 2, "prefix");
+
+    // key() returns a std::vector<std::uint32_t> for these letters
+    std::vector<std::uint32_t> key = path_map.find(path).key();
+    assert(key == path);
+
+    auto longest = path_map.longest_prefix(std::vector<std::uint32_t>{4000000000u, 1, 2, 3, 4});
+    assert(longest != path_map.end() && longest.value() == "value");
+}
+```
+
+The iteration order of the trie nodes follows the *unsigned* value of the letters and doesn't depend on the policy or on the signedness of `char`. The keys stored in the same array hash node are not ordered, as usual.
+
+For the serialization, the `serializer` and `deserializer` need to support the calls with the `CharT` type (`void operator()(const CharT* value, std::size_t value_size)` and `void operator()(CharT* value_out, std::size_t value_size)`) and not only `char`. See the API of `serialize/deserialize`.
+
+### Children policies
+
+An inner node of the trie (a `trie_node`) maps a letter to a child node. How this mapping is stored is chosen with the `ChildrenPolicy` template parameter. The full signature of the classes is:
+
+```c++
+template <class CharT, class T, class Hash = tsl::detail_htrie_hash::default_hash<CharT>, class KeySizeT = std::uint16_t,
+          class ChildrenPolicy = tsl::htrie_policy::default_children_policy<CharT>, class Allocator = std::allocator<char>>
+class htrie_map;
+
+template <class CharT, class Hash = tsl::detail_htrie_hash::default_hash<CharT>, class KeySizeT = std::uint16_t,
+          class ChildrenPolicy = tsl::htrie_policy::default_children_policy<CharT>, class Allocator = std::allocator<char>>
+class htrie_set;
+```
+
+The policies are defined in [htrie_children_policies.h](include/tsl/htrie_children_policies.h) (namespace `tsl::htrie_policy`):
+
+| Policy | Letters | Size of the container in a trie node | Lookup | Notes |
+|---|---|---|---|---|
+| `dense_array_children` | 8 or 16 bits | 2 056 bytes (8 bits), 524 296 bytes (16 bits) | direct access | The historical layout and the default for 8 bits letters. Fastest, but very memory hungry when the nodes have few children. Not usable for 16 bits letters unless the trie is tiny. |
+| `flat_map_children` | any | 16 bytes + `sizeof(CharT) + sizeof(void*)` per child slot (capacity doubles), in a single allocation | binary search | The default for letters wider than 8 bits. Insertion shifts the elements. |
+| `bitmap_children` | 8 bits | 48 bytes + 8 bytes per child slot (capacity doubles) | bitmap + popcount | Smaller nodes than the dense array and faster than the flat map on bytes. |
+| `std_map_children` | any | 48 bytes + one allocation per child | red-black tree | Mostly a reference implementation. Raw pointers only: it can't be used with a fancy pointer allocator (shared memory). |
+
+```c++
+namespace pol = tsl::htrie_policy;
+
+// Same as tsl::htrie_map<char, int>
+tsl::htrie_map<char, int, tsl::detail_htrie_hash::default_hash<char>, std::uint16_t, pol::dense_array_children> map1;
+
+// Smaller trie nodes for byte strings
+tsl::htrie_map<char, int, tsl::detail_htrie_hash::default_hash<char>, std::uint16_t, pol::bitmap_children> map2;
+
+// Wide letters
+tsl::htrie_set<char16_t, tsl::detail_htrie_hash::default_hash<char16_t>, std::uint16_t, pol::flat_map_children> set;
+```
+
+Which one is the best depends on your data. On a quick benchmark (400 000 random keys of 4 to 16 letters drawn from a skewed alphabet of 60 letters, GCC 13, `-O2`, 2 cores machine, best of 5 runs) with the default burst threshold, the whole trie uses ~30 bytes per key whatever the policy as most of the memory is in the array hash nodes and the number of trie nodes is small; lookups took 92 ns with the dense array, 120 ns with the bitmap, 135 ns with the flat map and 141 ns with `std::map`. With a burst threshold of 16 (many trie nodes) the bitmap and the flat map used ~12% less memory than the dense array (179 vs 204 bytes per key; ~5% less with a threshold of 128) and `std::map` was 2.5x (threshold 128) to 5.5x (threshold 16) slower than the dense array on lookups. With 32 bits letters (alphabet of 6 000 letters) the flat map was 1.5x to 2.4x faster than `std::map` and 8% to 10% smaller with a small burst threshold (128 and 16), and on par with it with the default one (`std::map` was 4% faster). Measure with your own data and hash function.
+
+#### Writing your own policy
+
+A policy is a class with a member alias template `children<CharT, NodeHandle, Allocator>` naming a container type that maps a letter to an owning `NodeHandle` (a move-only smart pointer which holds the pointer type of the allocator, so possibly a fancy pointer, and knows how to free the node). The container is constructed from a `const Allocator&` and must provide `get_allocator`, `size`, `empty`, `reserve`, `find`, `first`, `next`, `set`, `release`, `erase` and `for_each`. It never allocates or destroys the nodes of the trie itself, only its own storage, which it allocates with the `Allocator` it is given (through `std::allocator_traits`, storing only `allocator_traits<...>::pointer` so that it works in shared memory). The exact requirements (including the iteration order that must follow the unsigned value of the letters) are documented at the top of [htrie_children_policies.h](include/tsl/htrie_children_policies.h), the provided containers can be used as examples.
+
+### Allocators
+
+All the memory of the trie is allocated through the `Allocator` template parameter (rebound to each type that is allocated): the trie nodes, the children containers, the buckets and the values of the array hash nodes. The allocator can be **stateful** and can use **fancy pointers**:
+
+- Every pointer stored in the trie is an `std::allocator_traits<...>::pointer` (and never a raw pointer), and every node keeps a copy of the allocator it was allocated with, which is also the one used to free it. A stateless allocator, like the default `std::allocator`, doesn't take any space (empty base optimization). With `boost::interprocess::allocator` the cost is one pointer sized `offset_ptr` per node.
+- The allocator is propagated like in the standard containers (`propagate_on_container_copy_assignment`, `propagate_on_container_move_assignment`, `propagate_on_container_swap` and `select_on_container_copy_construction`). Moving a trie to a trie with an unequal allocator moves the elements one by one, so it is also the way to move a trie from one segment to another.
+- `htrie_map` and `htrie_set` have the allocator extended constructors (`htrie_map(const htrie_map&, const Allocator&)`, `htrie_map(htrie_map&&, const Allocator&)`), `get_allocator()` and `deserialize(deserializer, hash_compatible, alloc)`.
+
+With an allocator of a shared memory segment (`boost::interprocess::allocator`, `boost::interprocess::offset_ptr`, ...) the whole trie lives inside the segment, which can be mapped at a different address in each process or each time the file is opened: you don't have to serialize anything. The trie can also be used in a [memory mapped file](https://www.boost.org/doc/libs/release/doc/html/interprocess/sharedmemorybetweenprocesses.html#interprocess.sharedmemorybetweenprocesses.mapped_file), the segment (even a bitwise copy of it) can be reopened later, and it can be grown while the trie is not mapped. Boost.Interprocess is header-only; shared memory objects need to link with `-pthread` (and `-lrt` with an old glibc).
+
+#### Memory mapped file (Boost.Interprocess)
+
+```c++
+#include <boost/interprocess/allocators/allocator.hpp>
+#include <boost/interprocess/managed_mapped_file.hpp>
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <tsl/htrie_map.h>
+
+namespace bip = boost::interprocess;
+
+using segment_type = bip::managed_mapped_file;
+using allocator_type = bip::allocator<char, segment_type::segment_manager>;
+
+// The allocator is the last template parameter. bitmap_children works with
+// fancy pointers (bip::offset_ptr), so the whole trie lives in the segment.
+using trie_type = tsl::htrie_map<char, std::int64_t,
+                                 tsl::detail_htrie_hash::default_hash<char>,
+                                 std::uint16_t, tsl::htrie_policy::bitmap_children,
+                                 allocator_type>;
+
+int main() {
+  // Creates the file the first time, maps the existing one the next times.
+  segment_type segment(bip::open_or_create, "words.bin", 16 * 1024 * 1024);
+
+  trie_type* trie = segment.find_or_construct<trie_type>("words")(
+      tsl::detail_htrie_hash::default_hash<char>(),
+      allocator_type(segment.get_segment_manager()));
+
+  std::cout << "Found " << trie->size() << " words in the file\n";
+
+  trie->insert("one", 1);
+  trie->insert("two", 2);
+  trie->insert("three", 3);
+
+  const auto it = trie->find("two");
+  if (it != trie->end()) {
+    std::cout << "two -> " << it.value() << "\n";
+  }
+
+  segment.flush();  // Optional: write the changes to the disk now.
+  return 0;
+}
+```
+
+#### Shared memory, keys with 32 bits letters
+
+```c++
+#include <boost/interprocess/allocators/allocator.hpp>
+#include <boost/interprocess/managed_shared_memory.hpp>
+#include <cstdint>
+#include <iostream>
+#include <tsl/htrie_set.h>
+
+namespace bip = boost::interprocess;
+
+using segment_type = bip::managed_shared_memory;
+using allocator_type = bip::allocator<char, segment_type::segment_manager>;
+
+// Keys are sequences of 32 bits letters.
+using trie_type =
+    tsl::htrie_set<char32_t, tsl::detail_htrie_hash::default_hash<char32_t>,
+                   std::uint16_t, tsl::htrie_policy::flat_map_children,
+                   allocator_type>;
+
+int main() {
+  bip::shared_memory_object::remove("my_trie");
+  {
+    segment_type segment(bip::create_only, "my_trie", 4 * 1024 * 1024);
+    trie_type* trie = segment.construct<trie_type>("trie")(
+        allocator_type(segment.get_segment_manager()));
+
+    trie->insert(U"\U0001F600 smile");
+    trie->insert(U"hello");
+  }
+
+  // Could be another process: the segment is mapped at another address.
+  {
+    segment_type segment(bip::open_only, "my_trie");
+    trie_type* trie = segment.find<trie_type>("trie").first;
+    std::cout << trie->size() << " keys, hello: " << trie->count(U"hello")
+              << "\n";
+
+    segment.destroy_ptr(trie);  // Gives back all the memory to the segment.
+  }
+  bip::shared_memory_object::remove("my_trie");
+  return 0;
+}
+```
+
+#### Requirements and limitations
+
+- The `Hash` is stored in the trie, so it must be usable in shared memory too: no pointer to the memory of the process, and no function pointer or `std::function` (the address of a function is different in each process). The default hash (a stateless function object) is.
+- The iterators are plain C++ objects holding raw pointers: don't put them in shared memory and don't keep them when the segment is unmapped.
+- The values of a map must not refer to the memory of the process either. A value which needs an allocator (a `boost::interprocess::basic_string`, a `boost::interprocess::vector`, ...) has to be built by the caller with the right allocator (`map.insert(key, value_built_with_the_segment_allocator)`): the values are never constructed with the allocator of the trie, so `operator[]` and default constructed values can't be used for them.
+- Use a children policy that works with fancy pointers: `dense_array_children`, `flat_map_children` and `bitmap_children` do, `std_map_children` doesn't. The dense array is not a good fit for a segment with 16 bits letters or more (see the table above).
+- Never copy the bytes of a node or a handle yourself: a fancy pointer is only valid as part of the segment. Copying the whole segment (the file, a snapshot, ...) is fine.
+- The allocator can throw when the segment is full (`boost::interprocess::bad_alloc`). A failed insertion leaves the trie unchanged and doesn't leak, a failed copy assignment leaves the target untouched. An `erase` can allocate when it has to shrink a bucket, so it may throw it too, again leaving the trie valid and without leaks. The segment has to be big enough, or grown (`managed_mapped_file::grow`) while the trie is not mapped.
+- Like the other containers, a trie can't be modified concurrently by several processes: you need your own synchronization (a `boost::interprocess::interprocess_mutex` stored in the segment, for example).
+- `std::allocator` has no extra cost: the default build (stateless allocator, raw pointers) uses the same `malloc`/`realloc`/`free` for the buckets as before, and a quick benchmark showed no difference with the previous version beyond the noise of the machine.
 
 ### Benchmark
 

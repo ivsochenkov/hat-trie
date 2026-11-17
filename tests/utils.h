@@ -169,8 +169,10 @@ class serializer {
     serialize_impl(val);
   }
 
-  void operator()(const char* data, std::uint64_t size) {
-    m_ostream.write(data, size);
+  template <class CharT>
+  void operator()(const CharT* data, std::uint64_t size) {
+    m_ostream.write(reinterpret_cast<const char*>(data),
+                    boost::numeric_cast<std::streamsize>(size * sizeof(CharT)));
   }
 
   std::string str() const { return m_ostream.str(); }
@@ -207,8 +209,10 @@ class deserializer {
     return deserialize_impl<T>();
   }
 
-  void operator()(char* data_out, std::uint64_t size) {
-    m_istream.read(data_out, boost::numeric_cast<std::size_t>(size));
+  template <class CharT>
+  void operator()(CharT* data_out, std::uint64_t size) {
+    m_istream.read(reinterpret_cast<char*>(data_out),
+                   boost::numeric_cast<std::streamsize>(size * sizeof(CharT)));
   }
 
  private:
