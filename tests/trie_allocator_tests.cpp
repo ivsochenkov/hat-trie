@@ -58,8 +58,8 @@
 #include <utility>
 #include <vector>
 
-#include "tsl/array-hash/array_map.h"
-#include "tsl/array-hash/array_set.h"
+#include <tsl/array_map.h>
+#include <tsl/array_set.h>
 #include "tsl/htrie_map.h"
 #include "tsl/htrie_set.h"
 #include "utils.h"

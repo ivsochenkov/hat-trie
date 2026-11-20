@@ -12,7 +12,7 @@ endif()
 
 # Boost::unit_test_framework
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost 1.54.0 REQUIRED COMPONENTS unit_test_framework)
+find_package(Boost 1.54.0 CONFIG REQUIRED COMPONENTS unit_test_framework)
 target_link_libraries(tsl_hat_trie_tests PRIVATE Boost::unit_test_framework)   
 
 # Boost.Interprocess (header only) for the shared memory / memory mapped files

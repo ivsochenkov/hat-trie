@@ -7,11 +7,7 @@ add_library(tsl_hat_trie INTERFACE)
 add_library(tsl::hat_trie ALIAS tsl_hat_trie)
 
 target_include_directories(tsl_hat_trie INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_sources(tsl_hat_trie INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/array-hash/array_growth_policy.h"
-                                      "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/array-hash/array_hash.h"
-                                      "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/htrie_children_policies.h"
-                                      "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/array-hash/array_map.h"
-                                      "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/array-hash/array_set.h"
+target_sources(tsl_hat_trie INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/htrie_children_policies.h"
                                       "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/htrie_hash.h"
                                       "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/htrie_map.h"
                                       "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/htrie_set.h")
@@ -22,6 +18,8 @@ foreach(dep array-hash)
   if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/${dep}")
     message(FATAL_ERROR
       "third_party/${dep} is missing. Run: git submodule update --init --recursive")
+  else()
+    INCLUDE_DIRECTORIES(third_party/${dep}/include)
   endif()
 endforeach()
 

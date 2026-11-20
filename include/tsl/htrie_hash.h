@@ -39,8 +39,9 @@
 #include <utility>
 #include <vector>
 
-#include "array-hash/array_map.h"
-#include "array-hash/array_set.h"
+#include <tsl/array_map.h>
+#include <tsl/array_set.h>
+
 #include "htrie_children_policies.h"
 
 /*
