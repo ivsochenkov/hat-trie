@@ -18,6 +18,13 @@ target_sources(tsl_hat_trie INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include/tsl/a
 
 target_compile_features(tsl_hat_trie INTERFACE cxx_std_11) 
 
+foreach(dep array-hash)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/${dep}")
+    message(FATAL_ERROR
+      "third_party/${dep} is missing. Run: git submodule update --init --recursive")
+  endif()
+endforeach()
+
 OPTION(BUILD_TESTS OFF)
 if(BUILD_TESTS)
     add_subdirectory(tests)
