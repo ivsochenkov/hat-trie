@@ -95,5 +95,6 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/tsl-hat-trieConfigVersion.cmake"
 
 OPTION(BUILD_TESTS OFF)
 if(BUILD_TESTS)
+    enable_testing()
     add_subdirectory(tests)
 endif()
