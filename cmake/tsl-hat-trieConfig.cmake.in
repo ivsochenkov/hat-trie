@@ -1,0 +1,13 @@
+# This module sets the following variables:
+# * tsl-hat-trie_FOUND - true if tsl-hat-trie found on the system
+# * tsl-hat-trie_INCLUDE_DIRS - the directory containing tsl-hat-trie headers
+@PACKAGE_INIT@
+
+if(NOT TARGET tsl::hat_trie)
+  if(@TSL_HAT_TRIE_USE_SYSTEM_ARRAY_HASH@)
+    include(CMakeFindDependencyMacro)
+    find_dependency(tsl-array-hash)
+  endif()
+  include("${CMAKE_CURRENT_LIST_DIR}/tsl-hat-trieTargets.cmake")
+  get_target_property(tsl-hat-trie_INCLUDE_DIRS tsl::hat_trie INTERFACE_INCLUDE_DIRECTORIES)
+endif()

@@ -416,6 +416,57 @@ cmake --build .
 ./tsl_hat_trie_tests
 ```
 
+### Nix
+The repository provides a [flake](flake.nix) for [Nix](https://nixos.org/). The array-hash dependency is pulled in as a flake input, so the git submodule is not needed.
+
+```bash
+nix build                # build and install the headers + CMake package config into ./result
+nix flake check          # build the Boost.Test suite and run it
+nix develop              # development shell: cmake, Boost, clangd, clang-format, doxygen, gdb...
+```
+
+Inside the development shell:
+```bash
+cmake -S . -B build -DBUILD_TESTS=ON
+cmake --build build && ./build/tests/tsl_hat_trie_tests
+```
+If you use [direnv](https://direnv.net/) the provided [.envrc](.envrc) enters the shell automatically.
+
+To use the library in your own flake, add this repository as an input and apply the overlay. `pkgs.tsl-hat-trie` (and `pkgs.tsl-array-hash`, which it needs) become available:
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.hat-trie = {
+    url = "github:ivsochenkov/hat-trie";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { nixpkgs, hat-trie, ... }:
+    let
+      pkgs = import nixpkgs {
+        system = "x86_64-linux";
+        overlays = [ hat-trie.overlays.default ];
+      };
+    in {
+      packages.x86_64-linux.default = pkgs.stdenv.mkDerivation {
+        name = "my-app";
+        src = ./.;
+        nativeBuildInputs = [ pkgs.cmake ];
+        buildInputs = [ pkgs.tsl-hat-trie ];
+      };
+    };
+}
+```
+
+The installed package can then be used from CMake. `tsl::hat_trie` brings the array-hash include path with it:
+```cmake
+find_package(tsl-hat-trie REQUIRED)
+target_link_libraries(your_target PRIVATE tsl::hat_trie)
+```
+
+When building without Nix, `CMakeLists.txt` uses `third_party/array-hash` if the submodule is checked out and falls back to an installed `tsl-array-hash` package (`find_package(tsl-array-hash)`) otherwise.
+
 ### Usage
 
 The API can be found [here](https://tessil.github.io/hat-trie/doc_without_string_view/html). If `std::string_view` is available, the API changes slightly and can be found [here](https://tessil.github.io/hat-trie/doc/html/).
