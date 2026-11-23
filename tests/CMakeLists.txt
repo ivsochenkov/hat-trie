@@ -11,8 +11,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
 endif()
 
 # Boost::unit_test_framework
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost 1.54.0 CONFIG REQUIRED COMPONENTS unit_test_framework)
+find_package(Boost 1.75 CONFIG REQUIRED COMPONENTS unit_test_framework)
 target_link_libraries(tsl_hat_trie_tests PRIVATE Boost::unit_test_framework)   
 
 # Boost.Interprocess (header only) for the shared memory / memory mapped files
@@ -29,4 +28,4 @@ endif()
 # tsl::hat_trie
 target_link_libraries(tsl_hat_trie_tests PRIVATE tsl::hat_trie)  
 
-add_test(tsl_hat_trie_tests tsl_hat_trie_test)
+add_test(tsl_hat_trie_test tsl_hat_trie_tests)

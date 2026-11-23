@@ -3,6 +3,11 @@ cmake_minimum_required(VERSION 3.10)
 project(tsl_hat_trie VERSION 0.7.1)
 include(GNUInstallDirs)
 
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
 add_library(tsl_hat_trie INTERFACE)
 # Use tsl::hat_trie as target, more consistent with other libraries conventions (Boost, Qt, ...)
 add_library(tsl::hat_trie ALIAS tsl_hat_trie)
